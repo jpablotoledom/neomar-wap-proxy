@@ -1,0 +1,43 @@
+@startuml protocol-sequence
+!theme plain
+title Neomar WAP Proxy - Request/Response Sequence
+
+actor "Rover 1.5\n(on Palm)" as rover
+participant "neomar_wap_gateway.py" as gw
+participant "Origin HTTP server" as origin
+
+rover -> gw : UDP datagram (WTP Invoke + WSP Get)\n"GET http://example/page.wml"
+activate gw
+
+gw -> gw : parse_wtp_header()\n(pdu_type, tid)
+gw -> gw : parse_get_request()\n-> requested URI
+
+alt URI is the built-in home page (wap.palm.com)
+  gw -> gw : build_home_page()
+else URI ends in .wbmp
+  gw -> origin : HTTP GET (User-Agent: Rover 1.5 ...)
+  origin --> gw : image/vnd.wap.wbmp bytes
+else otherwise
+  gw -> origin : HTTP GET (User-Agent: Rover 1.5 ...)
+  origin --> gw : text/vnd.wap.wml
+  gw -> gw : parse_wml_root() (strip DOCTYPE/prolog)
+  gw -> gw : flatten_blocks() + paginate()\n(split into <= SAFE_PAGE_BYTES cards\nwith Prev/Next links)
+  gw -> gw : compile_element() -> WBXML
+end
+
+gw -> gw : build_wsp_reply()\n(PDU type=Reply, status=200,\nheaders_len, Content-Type, body)
+gw -> gw : build_wtp_result()\n(mirrors Invoke's flags + TID,\nswitches PDU type to Result)
+
+gw -> rover : UDP datagram (WTP Result + WSP Reply)
+deactivate gw
+
+rover -> rover : render WBXML card
+
+note over rover, gw
+  If the user taps "Next", Rover sends a fresh
+  Invoke for the same URL with &__page=N+1,
+  handled as an independent single-packet
+  request/response (no WTP-level session state).
+end note
+
+@enduml

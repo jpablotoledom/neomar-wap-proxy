@@ -1,0 +1,38 @@
+@startuml pagination-flow
+!theme plain
+title Neomar WAP Proxy - Page-Splitting Decision Flow
+
+start
+:Fetch WML page over HTTP;
+:Parse into ElementTree,\nlocate first <card>;
+:flatten_blocks(card)\n-> list of atomic WML elements;
+
+partition "for each child element" {
+  if (compile_element(child) <= SAFE_PAGE_BYTES?) then (yes)
+    :keep as one block;
+  else (no)
+    :split child.text into\nTEXT_CHUNK_CHARS-sized <p> blocks\n(nested markup inside it is lost);
+  endif
+}
+
+:paginate(blocks);
+partition "greedy packing" {
+  :current_page = [];
+  while (blocks remaining?) is (yes)
+    :trial = current_page + [next block];
+    if (compile_card(trial) > SAFE_PAGE_BYTES\nand current_page not empty?) then (yes)
+      :close current_page as a full page;
+      :start new page with this block;
+    else (no)
+      :append block to current_page;
+    endif
+  endwhile (no)
+  :close last page;
+}
+
+:select requested page N\n(from ?__page=N, default 0);
+:append "<< Prev" / "Next >>" links\npointing at page N-1 / N+1;
+:compile_card() -> final WBXML\n(must stay under the empirically\nfound ~975 byte transport ceiling);
+stop
+
+@enduml

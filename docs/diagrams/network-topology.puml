@@ -1,0 +1,54 @@
+@startuml network-topology
+!theme plain
+title Neomar WAP Proxy - Network Topology
+
+skinparam node {
+  BackgroundColor #f5f5f5
+  BorderColor #333333
+}
+
+node "Palm m105\n(Palm OS 3.5)" as palm {
+  component "Neomar / Rover 1.5\n(WAP micro-browser)" as rover
+}
+
+node "Windows XP\n(serial/USB link)" as xp {
+  component "Softick PPP\n(NAT + PPP server)" as softick
+  note right of softick
+    Hardcodes packets for
+    165.160.13.20:49300 and
+    165.160.15.20:49300
+    (Rover's built-in gateway
+    addresses, long dead)
+  end note
+  component "route / arp\nstatic entries" as routes
+}
+
+node "Linux gateway host\n(192.168.1.160)" as gw {
+  component "IP aliases\n165.160.13.20/32\n165.160.15.20/32" as alias
+  component "neomar_wap_gateway.py\n(UDP :49300)" as gateway
+  component "OpenXiino\n(TCP :4040, optional)" as openxiino
+}
+
+node "Any WAP-capable\nHTTP origin server" as origin {
+  component "WML content\n(text/vnd.wap.wml)" as wml
+  component "WBMP images" as wbmp
+}
+
+palm -down-> xp : USB / serial\n(PPP)
+rover .down.> softick
+softick -right-> routes : "route add\narp -s"
+routes -down-> gw : "next-hop forced\nto 192.168.1.160"
+gw -down-> alias
+alias -right-> gateway : "packet accepted\nlocally (owned IP)"
+gateway -down-> origin : "HTTP GET\n(User-Agent: Rover 1.5 ...)"
+origin -up-> gateway : "WML / WBMP"
+gateway -up-> alias : "WSP Reply\n(WBXML / WBMP)"
+
+note bottom of gw
+  Because Rover connects to a fixed,
+  no-longer-existent IP:port (not a
+  hostname), interception happens at
+  the routing/ARP layer, not DNS.
+end note
+
+@enduml
